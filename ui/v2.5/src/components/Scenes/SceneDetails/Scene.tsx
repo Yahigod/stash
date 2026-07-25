@@ -28,6 +28,11 @@ import { Icon } from "src/components/Shared/Icon";
 import { Counter } from "src/components/Shared/Counter";
 import { useToast } from "src/hooks/Toast";
 import SceneQueue, { QueuedScene } from "src/models/sceneQueue";
+import {
+  buildNextSelectedQueueCycle,
+  clearSelectedQueueCycle,
+  persistSelectedQueueCycle,
+} from "src/models/sceneQueueCycle";
 import { ListFilterModel } from "src/models/list-filter/filter";
 import Mousetrap from "mousetrap";
 import { OrganizedButton } from "./OrganizedButton";
@@ -858,6 +863,14 @@ const SceneLoader: React.FC<RouteComponentProps<ISceneParams>> = ({
     }
   }, [sceneQueue]);
 
+  useEffect(() => {
+    if (sceneQueue.sceneIDs) {
+      persistSelectedQueueCycle(sceneQueue.sceneIDs.map(String));
+    } else {
+      clearSelectedQueueCycle();
+    }
+  }, [sceneQueue]);
+
   async function onQueueLessScenes() {
     if (!sceneQueue.query || queueStart <= 1) {
       return;
@@ -899,13 +912,45 @@ const SceneLoader: React.FC<RouteComponentProps<ISceneParams>> = ({
     return scenes;
   }
 
-  function loadScene(sceneID: string, autoPlay?: boolean, newPage?: number) {
-    const sceneLink = sceneQueue.makeLink(sceneID, {
+  function loadSceneFromQueue(
+    queue: SceneQueue,
+    sceneID: string,
+    autoPlay?: boolean,
+    newPage?: number
+  ) {
+    const sceneLink = queue.makeLink(sceneID, {
       newPage,
       autoPlay,
       continue: continuePlaylist,
     });
     history.replace(sceneLink);
+  }
+
+  function loadScene(sceneID: string, autoPlay?: boolean, newPage?: number) {
+    loadSceneFromQueue(sceneQueue, sceneID, autoPlay, newPage);
+  }
+
+  function startSelectedQueueCycle(
+    autoPlay: boolean,
+    previousFinalSceneID: string
+  ) {
+    const nextScenes = buildNextSelectedQueueCycle(
+      queueScenes,
+      previousFinalSceneID
+    );
+
+    if (nextScenes.length === 0) return false;
+
+    const nextSceneIDs = nextScenes.map((queuedScene) => queuedScene.id);
+    const nextQueue = SceneQueue.fromSceneIDList(nextSceneIDs);
+
+    persistSelectedQueueCycle(nextSceneIDs);
+    setQueueScenes(nextScenes);
+    setQueueTotal(nextScenes.length);
+    setQueueStart(1);
+    loadSceneFromQueue(nextQueue, nextScenes[0].id, autoPlay);
+
+    return true;
   }
 
   async function restartQueue(autoPlay: boolean) {
@@ -920,6 +965,11 @@ const SceneLoader: React.FC<RouteComponentProps<ISceneParams>> = ({
       setQueueScenes(scenes);
       setQueueStart(1);
       loadScene(scenes[0].id, autoPlay, 1);
+      return;
+    }
+
+    if (sceneQueue.sceneIDs && queueScenes.length > 0) {
+      startSelectedQueueCycle(autoPlay, id);
       return;
     }
 
@@ -988,6 +1038,11 @@ const SceneLoader: React.FC<RouteComponentProps<ISceneParams>> = ({
         loadScene(sceneID, autoPlay, page);
       }
     } else if (queueTotal !== 0) {
+      if (sceneQueue.sceneIDs && queueScenes.length > 1) {
+        startSelectedQueueCycle(autoPlay, id);
+        return;
+      }
+
       const index = Math.floor(Math.random() * queueTotal);
       loadScene(queueScenes[index].id, autoPlay);
     }
