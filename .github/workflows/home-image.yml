@@ -1,0 +1,112 @@
+name: Build Home Stash image
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: Immutable image tag to publish
+        required: true
+        default: home-0.31.1-baseline.1
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: home-stash-image-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-amd64:
+    runs-on: ubuntu-24.04
+
+    env:
+      IMAGE_REPOSITORY: ghcr.io/yahigod/stash
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Validate requested tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag='${{ inputs.image_tag }}'
+
+          if [[ ! "$tag" =~ ^[a-z0-9][a-z0-9._-]{0,127}$ ]]; then
+            echo "Invalid container tag: $tag" >&2
+            exit 1
+          fi
+
+      - name: Define image references
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "IMAGE=${IMAGE_REPOSITORY}:${{ inputs.image_tag }}" >> "$GITHUB_ENV"
+          echo "SHA_IMAGE=${IMAGE_REPOSITORY}:sha-${GITHUB_SHA::12}" >> "$GITHUB_ENV"
+          echo "SHORT_SHA=${GITHUB_SHA::8}" >> "$GITHUB_ENV"
+
+      - name: Log in to GitHub Container Registry
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s' '${{ secrets.GITHUB_TOKEN }}' |
+            docker login ghcr.io \
+              --username '${{ github.actor }}' \
+              --password-stdin
+
+      - name: Build amd64 image
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          docker build \
+            --build-arg "GITHASH=${SHORT_SHA}" \
+            --build-arg "STASH_VERSION=${{ inputs.image_tag }}" \
+            --label "org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}" \
+            --label "org.opencontainers.image.revision=${GITHUB_SHA}" \
+            --label "org.opencontainers.image.version=${{ inputs.image_tag }}" \
+            --tag "$IMAGE" \
+            --tag "$SHA_IMAGE" \
+            --file docker/build/x86_64/Dockerfile \
+            .
+
+      - name: Verify built image
+        shell: bash
+        run: |
+          set -euo pipefail
+          version_output="$(docker run --rm "$IMAGE" --version)"
+          printf '%s\n' "$version_output"
+
+          grep -F '${{ inputs.image_tag }}' <<<"$version_output"
+          grep -F "$SHORT_SHA" <<<"$version_output"
+
+      - name: Push image
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker push "$IMAGE"
+          docker push "$SHA_IMAGE"
+
+      - name: Record published digest
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker pull "$IMAGE" >/dev/null
+          digest="$(docker image inspect --format '{{index .RepoDigests 0}}' "$IMAGE")"
+
+          {
+            echo '## Published Home Stash image'
+            echo
+            echo '- Source commit: `${{ github.sha }}`'
+            echo '- Version: `${{ inputs.image_tag }}`'
+            echo '- Image: `'$IMAGE'`'
+            echo '- Commit tag: `'$SHA_IMAGE'`'
+            echo '- Digest: `'$digest'`'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          printf 'Published digest: %s\n' "$digest"
