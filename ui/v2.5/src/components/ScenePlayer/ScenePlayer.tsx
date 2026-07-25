@@ -223,6 +223,7 @@ interface IScenePlayerProps {
   hideScrubberOverride: boolean;
   autoplay?: boolean;
   permitLoop?: boolean;
+  forceLoop?: boolean;
   initialTimestamp: number;
   sendSetTimestamp: (setTimestamp: (value: number) => void) => void;
   onComplete: () => void;
@@ -237,6 +238,7 @@ export const ScenePlayer: React.FC<IScenePlayerProps> = PatchComponent(
     hideScrubberOverride,
     autoplay,
     permitLoop = true,
+    forceLoop = false,
     initialTimestamp: _initialTimestamp,
     sendSetTimestamp,
     onComplete,
@@ -287,11 +289,12 @@ export const ScenePlayer: React.FC<IScenePlayerProps> = PatchComponent(
     const maxLoopDuration = interfaceConfig?.maximumLoopDuration ?? 0;
     const looping = useMemo(
       () =>
-        !!file?.duration &&
-        permitLoop &&
-        maxLoopDuration !== 0 &&
-        file.duration < maxLoopDuration,
-      [file, permitLoop, maxLoopDuration]
+        forceLoop ||
+        (!!file?.duration &&
+          permitLoop &&
+          maxLoopDuration !== 0 &&
+          file.duration < maxLoopDuration),
+      [file, forceLoop, permitLoop, maxLoopDuration]
     );
 
     const getPlayer = useCallback(() => {

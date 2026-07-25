@@ -137,7 +137,9 @@ export const QueueViewer: React.FC<IPlaylistViewer> = ({
           ) : (
             ""
           )}
-          {currentIndex < scenes.length - 1 || hasMoreScenes ? (
+          {currentIndex < scenes.length - 1 ||
+          hasMoreScenes ||
+          (continuePlaylist && scenes.length > 0) ? (
             <Button
               className="minimal"
               variant="secondary"

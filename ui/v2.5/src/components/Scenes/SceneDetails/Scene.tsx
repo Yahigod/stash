@@ -908,22 +908,46 @@ const SceneLoader: React.FC<RouteComponentProps<ISceneParams>> = ({
     history.replace(sceneLink);
   }
 
+  async function restartQueue(autoPlay: boolean) {
+    if (sceneQueue.query) {
+      const filterCopy = sceneQueue.query.clone();
+      filterCopy.currentPage = 1;
+      const query = await queryFindScenes(filterCopy);
+      const { scenes } = query.data.findScenes;
+
+      if (scenes.length === 0) return;
+
+      setQueueScenes(scenes);
+      setQueueStart(1);
+      loadScene(scenes[0].id, autoPlay, 1);
+      return;
+    }
+
+    if (queueScenes.length > 0) {
+      loadScene(queueScenes[0].id, autoPlay);
+    }
+  }
+
   async function queueNext(autoPlay: boolean) {
     if (currentQueueIndex === -1) return;
 
     if (currentQueueIndex < queueScenes.length - 1) {
       loadScene(queueScenes[currentQueueIndex + 1].id, autoPlay);
-    } else {
-      // if we're at the end of the queue, load more scenes
-      if (currentQueueIndex === queueScenes.length - 1 && queueHasMoreScenes) {
-        const loadedScenes = await onQueueMoreScenes();
-        if (loadedScenes && loadedScenes.length > 0) {
-          // set the page to the next page
-          const newPage = (sceneQueue.query?.currentPage ?? 0) + 1;
-          loadScene(loadedScenes[0].id, autoPlay, newPage);
-        }
+      return;
+    }
+
+    // If we're at the end of the loaded queue, load the next page first.
+    if (queueHasMoreScenes) {
+      const loadedScenes = await onQueueMoreScenes();
+      if (loadedScenes && loadedScenes.length > 0) {
+        const newPage = (sceneQueue.query?.currentPage ?? 0) + 1;
+        loadScene(loadedScenes[0].id, autoPlay, newPage);
+        return;
       }
     }
+
+    // We reached the true end of the queue. Start a new fixed-order cycle.
+    await restartQueue(autoPlay);
   }
 
   async function queuePrevious(autoPlay: boolean) {
@@ -1037,6 +1061,7 @@ const SceneLoader: React.FC<RouteComponentProps<ISceneParams>> = ({
           hideScrubberOverride={hideScrubber}
           autoplay={autoplay}
           permitLoop={!continuePlaylist}
+          forceLoop={!continuePlaylist || queueTotal <= 1}
           initialTimestamp={initialTimestamp}
           sendSetTimestamp={getSetTimestamp}
           onComplete={onComplete}
