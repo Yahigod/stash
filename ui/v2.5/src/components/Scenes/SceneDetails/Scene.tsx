@@ -31,6 +31,7 @@ import SceneQueue, { QueuedScene } from "src/models/sceneQueue";
 import {
   buildNextSelectedQueueCycle,
   clearSelectedQueueCycle,
+  isFilteredQueueCycleCandidateValid,
   persistSelectedQueueCycle,
 } from "src/models/sceneQueueCycle";
 import { ListFilterModel } from "src/models/list-filter/filter";
@@ -950,22 +951,22 @@ const SceneLoader: React.FC<RouteComponentProps<ISceneParams>> = ({
 
       if (scenes.length === 0) return false;
 
-      const repeatsBoundary = scenes[0].id === previousFinalSceneID;
-      const repeatsSeed =
-        previousSeed !== -1 && filterCopy.randomSeed === previousSeed;
       const canCompareEntireCycle =
         queueStart === 1 &&
         queueScenes.length === queueTotal &&
         scenes.length === count &&
         count === queueTotal;
-      const repeatsEntireOrder =
-        count >= 3 &&
-        canCompareEntireCycle &&
-        scenes.every(
-          (queuedScene, index) => queuedScene.id === queueScenes[index].id
-        );
 
-      if (repeatsBoundary || repeatsSeed || repeatsEntireOrder) {
+      if (
+        !isFilteredQueueCycleCandidateValid({
+          previousFinalSceneID,
+          previousSeed,
+          nextSeed: filterCopy.randomSeed,
+          previousSceneIDs: queueScenes.map((queuedScene) => queuedScene.id),
+          nextSceneIDs: scenes.map((queuedScene) => queuedScene.id),
+          canCompareEntireCycle,
+        })
+      ) {
         continue;
       }
 

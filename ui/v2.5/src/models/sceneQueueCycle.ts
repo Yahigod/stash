@@ -1,5 +1,4 @@
-const SELECTED_QUEUE_CYCLE_STORAGE_KEY =
-  "homeStash.selectedQueueCycle.v1";
+const SELECTED_QUEUE_CYCLE_STORAGE_KEY = "homeStash.selectedQueueCycle.v1";
 
 interface ISelectedQueueCycleState {
   version: 1;
@@ -17,11 +16,14 @@ function sameSceneOrder<T extends { id: string }>(
   );
 }
 
-export function fisherYatesShuffle<T>(values: readonly T[]) {
+export function fisherYatesShuffle<T>(
+  values: readonly T[],
+  random: () => number = Math.random
+) {
   const shuffled = [...values];
 
   for (let index = shuffled.length - 1; index > 0; index -= 1) {
-    const randomIndex = Math.floor(Math.random() * (index + 1));
+    const randomIndex = Math.floor(random() * (index + 1));
     [shuffled[index], shuffled[randomIndex]] = [
       shuffled[randomIndex],
       shuffled[index],
@@ -33,7 +35,8 @@ export function fisherYatesShuffle<T>(values: readonly T[]) {
 
 export function buildNextSelectedQueueCycle<T extends { id: string }>(
   scenes: readonly T[],
-  previousFinalSceneID: string
+  previousFinalSceneID: string,
+  random: () => number = Math.random
 ) {
   if (scenes.length <= 1) {
     return [...scenes];
@@ -42,7 +45,7 @@ export function buildNextSelectedQueueCycle<T extends { id: string }>(
   const maximumAttempts = Math.max(12, scenes.length * 2);
 
   for (let attempt = 0; attempt < maximumAttempts; attempt += 1) {
-    const candidate = fisherYatesShuffle(scenes);
+    const candidate = fisherYatesShuffle(scenes, random);
     const repeatsBoundary = candidate[0].id === previousFinalSceneID;
     const repeatsOrder =
       scenes.length >= 3 && sameSceneOrder(candidate, scenes);
@@ -62,6 +65,36 @@ export function buildNextSelectedQueueCycle<T extends { id: string }>(
   // attempts did not produce a valid order. A one-position rotation changes
   // the order and cannot start with the previous final item for unique IDs.
   return [...scenes.slice(1), scenes[0]];
+}
+
+interface IFilteredQueueCycleCandidate {
+  previousFinalSceneID: string;
+  previousSeed: number;
+  nextSeed: number;
+  previousSceneIDs: readonly string[];
+  nextSceneIDs: readonly string[];
+  canCompareEntireCycle: boolean;
+}
+
+export function isFilteredQueueCycleCandidateValid({
+  previousFinalSceneID,
+  previousSeed,
+  nextSeed,
+  previousSceneIDs,
+  nextSceneIDs,
+  canCompareEntireCycle,
+}: IFilteredQueueCycleCandidate) {
+  if (nextSceneIDs.length === 0) return false;
+
+  const repeatsBoundary = nextSceneIDs[0] === previousFinalSceneID;
+  const repeatsSeed = previousSeed !== -1 && nextSeed === previousSeed;
+  const repeatsEntireOrder =
+    nextSceneIDs.length >= 3 &&
+    canCompareEntireCycle &&
+    previousSceneIDs.length === nextSceneIDs.length &&
+    previousSceneIDs.every((sceneID, index) => sceneID === nextSceneIDs[index]);
+
+  return !repeatsBoundary && !repeatsSeed && !repeatsEntireOrder;
 }
 
 export function persistSelectedQueueCycle(sceneIDs: readonly string[]) {

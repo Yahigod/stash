@@ -8,7 +8,7 @@
     "start": "vite",
     "build": "vite build",
     "build-ci": "npm run validate && npm run build",
-    "validate": "npm run lint && npm run check && npm run format-check",
+    "validate": "npm run lint && npm run check && npm run format-check && npm run test:queue",
     "lint": "npm run lint:js && npm run lint:css",
     "lint:css": "stylelint --cache \"src/**/*.scss\"",
     "lint:js": "eslint --cache src/",
@@ -18,6 +18,7 @@
     "stylelint": "stylelint",
     "format": "prettier --write . ../../graphql",
     "format-check": "prettier --check . ../../graphql",
+    "test:queue": "node --test queue-tests/sceneQueueCycle.test.cjs",
     "gqlgen": "gql-gen --config codegen.ts",
     "extract": "NODE_ENV=development extract-messages -l=en,de -o src/locale -d en --flat false 'src/**/!(*.test).tsx'"
   },
