@@ -812,8 +812,6 @@ const SceneLoader: React.FC<RouteComponentProps<ISceneParams>> = ({
   const [queueStart, setQueueStart] = useState(1);
 
   const autoplay = queryParams.get("autoplay") === "true";
-  const hasExternalQueue =
-    queryParams.has("tv_queue") && queryParams.has("tv_bridge");
   const autoPlayOnSelected =
     configuration?.interface.autostartVideoOnPlaySelected ?? false;
 
@@ -1178,9 +1176,7 @@ const SceneLoader: React.FC<RouteComponentProps<ISceneParams>> = ({
           hideScrubberOverride={hideScrubber}
           autoplay={autoplay}
           permitLoop={!continuePlaylist}
-          forceLoop={
-            !continuePlaylist || (queueTotal <= 1 && !hasExternalQueue)
-          }
+          forceLoop={!continuePlaylist || queueTotal <= 1}
           initialTimestamp={initialTimestamp}
           sendSetTimestamp={getSetTimestamp}
           onComplete={onComplete}
