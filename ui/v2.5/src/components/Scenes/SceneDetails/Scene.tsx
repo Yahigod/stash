@@ -812,6 +812,8 @@ const SceneLoader: React.FC<RouteComponentProps<ISceneParams>> = ({
   const [queueStart, setQueueStart] = useState(1);
 
   const autoplay = queryParams.get("autoplay") === "true";
+  const hasExternalQueue =
+    queryParams.has("tv_queue") && queryParams.has("tv_bridge");
   const autoPlayOnSelected =
     configuration?.interface.autostartVideoOnPlaySelected ?? false;
 
@@ -930,6 +932,58 @@ const SceneLoader: React.FC<RouteComponentProps<ISceneParams>> = ({
     loadSceneFromQueue(sceneQueue, sceneID, autoPlay, newPage);
   }
 
+  async function startFilteredQueueCycle(
+    autoPlay: boolean,
+    previousFinalSceneID: string
+  ) {
+    if (!sceneQueue.query || queueTotal <= 1) return false;
+
+    const previousSeed = sceneQueue.query.randomSeed;
+    const maximumAttempts = 32;
+
+    for (let attempt = 0; attempt < maximumAttempts; attempt += 1) {
+      const filterCopy = sceneQueue.query.clone();
+      filterCopy.currentPage = 1;
+      filterCopy.sortBy = "random";
+      filterCopy.randomSeed = -1;
+
+      const query = await queryFindScenes(filterCopy);
+      const { scenes, count } = query.data.findScenes;
+
+      if (scenes.length === 0) return false;
+
+      const repeatsBoundary = scenes[0].id === previousFinalSceneID;
+      const repeatsSeed =
+        previousSeed !== -1 && filterCopy.randomSeed === previousSeed;
+      const canCompareEntireCycle =
+        queueStart === 1 &&
+        queueScenes.length === queueTotal &&
+        scenes.length === count &&
+        count === queueTotal;
+      const repeatsEntireOrder =
+        count >= 3 &&
+        canCompareEntireCycle &&
+        scenes.every(
+          (queuedScene, index) => queuedScene.id === queueScenes[index].id
+        );
+
+      if (repeatsBoundary || repeatsSeed || repeatsEntireOrder) {
+        continue;
+      }
+
+      const nextQueue = SceneQueue.fromListFilterModel(filterCopy);
+
+      setQueueScenes(scenes);
+      setQueueTotal(count);
+      setQueueStart(1);
+      loadSceneFromQueue(nextQueue, scenes[0].id, autoPlay, 1);
+
+      return true;
+    }
+
+    return false;
+  }
+
   function startSelectedQueueCycle(
     autoPlay: boolean,
     previousFinalSceneID: string
@@ -955,6 +1009,11 @@ const SceneLoader: React.FC<RouteComponentProps<ISceneParams>> = ({
 
   async function restartQueue(autoPlay: boolean) {
     if (sceneQueue.query) {
+      const startedRandomCycle = await startFilteredQueueCycle(autoPlay, id);
+      if (startedRandomCycle) return;
+
+      // One-item queues and the unlikely exhausted-retry case retain the
+      // fixed-order fallback rather than stopping playback.
       const filterCopy = sceneQueue.query.clone();
       filterCopy.currentPage = 1;
       const query = await queryFindScenes(filterCopy);
@@ -962,9 +1021,10 @@ const SceneLoader: React.FC<RouteComponentProps<ISceneParams>> = ({
 
       if (scenes.length === 0) return;
 
+      const fallbackQueue = SceneQueue.fromListFilterModel(filterCopy);
       setQueueScenes(scenes);
       setQueueStart(1);
-      loadScene(scenes[0].id, autoPlay, 1);
+      loadSceneFromQueue(fallbackQueue, scenes[0].id, autoPlay, 1);
       return;
     }
 
@@ -1023,6 +1083,9 @@ const SceneLoader: React.FC<RouteComponentProps<ISceneParams>> = ({
 
   async function queueRandom(autoPlay: boolean) {
     if (sceneQueue.query) {
+      const startedRandomCycle = await startFilteredQueueCycle(autoPlay, id);
+      if (startedRandomCycle) return;
+
       const { query } = sceneQueue;
       const pages = Math.ceil(queueTotal / query.itemsPerPage);
       const page = Math.floor(Math.random() * pages) + 1;
@@ -1034,7 +1097,6 @@ const SceneLoader: React.FC<RouteComponentProps<ISceneParams>> = ({
       const queryResults = await queryFindScenes(filterCopy);
       if (queryResults.data.findScenes.scenes.length > index) {
         const { id: sceneID } = queryResults.data.findScenes.scenes[index];
-        // navigate to the image player page
         loadScene(sceneID, autoPlay, page);
       }
     } else if (queueTotal !== 0) {
@@ -1116,7 +1178,9 @@ const SceneLoader: React.FC<RouteComponentProps<ISceneParams>> = ({
           hideScrubberOverride={hideScrubber}
           autoplay={autoplay}
           permitLoop={!continuePlaylist}
-          forceLoop={!continuePlaylist || queueTotal <= 1}
+          forceLoop={
+            !continuePlaylist || (queueTotal <= 1 && !hasExternalQueue)
+          }
           initialTimestamp={initialTimestamp}
           sendSetTimestamp={getSetTimestamp}
           onComplete={onComplete}
