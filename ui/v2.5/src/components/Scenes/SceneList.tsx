@@ -59,6 +59,8 @@ import { useZoomKeybinds } from "../List/ZoomSlider";
 import { FilteredListToolbar } from "../List/FilteredListToolbar";
 import { FilterTags } from "../List/FilterTags";
 import { SidebarFolderFilter } from "../List/Filters/FolderFilter";
+import { SendToTvDialog } from "../HomeStashTV/SendToTvDialog";
+import { resolveFilteredSceneIDs } from "src/models/homeStashTv/queue";
 
 function renderMetadataByline(result: GQL.FindScenesQueryResult) {
   const duration = result?.data?.findScenes?.duration;
@@ -548,12 +550,44 @@ export const FilteredSceneList = PatchComponent(
       );
     }
 
+    function onSendSelectedToTv() {
+      showModal(
+        <SendToTvDialog
+          sceneIDs={Array.from(selectedIds.values())}
+          onClose={() => closeModal()}
+        />
+      );
+    }
+
+    function onSendFilteredToTv() {
+      showModal(
+        <SendToTvDialog
+          resolveSceneIDs={() =>
+            resolveFilteredSceneIDs(effectiveFilter, queryFindScenes)
+          }
+          onClose={() => closeModal()}
+        />
+      );
+    }
+
     const otherOperations = [
       {
         text: intl.formatMessage({ id: "actions.play" }),
         onClick: () => onPlay(),
         isDisplayed: () => items.length > 0,
         className: "play-item",
+      },
+      {
+        text: "Send selection to TV…",
+        onClick: () => onSendSelectedToTv(),
+        isDisplayed: () => hasSelection,
+        className: "send-selection-to-tv",
+      },
+      {
+        text: "Send filtered queue to TV…",
+        onClick: () => onSendFilteredToTv(),
+        isDisplayed: () => totalCount > 0,
+        className: "send-filtered-queue-to-tv",
       },
       {
         text: intl.formatMessage(

@@ -18,7 +18,7 @@
     "stylelint": "stylelint",
     "format": "prettier --write . ../../graphql",
     "format-check": "prettier --check . ../../graphql",
-    "test:queue": "node --test queue-tests/sceneQueueCycle.test.cjs",
+    "test:queue": "node --test queue-tests/*.test.cjs",
     "gqlgen": "gql-gen --config codegen.ts",
     "extract": "NODE_ENV=development extract-messages -l=en,de -o src/locale -d en --flat false 'src/**/!(*.test).tsx'"
   },

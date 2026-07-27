@@ -17,6 +17,7 @@ import { SettingsServicesPanel } from "./SettingsServicesPanel";
 import { SettingsContext, useSettings } from "./context";
 import { SettingsLibraryPanel } from "./SettingsLibraryPanel";
 import { SettingsSecurityPanel } from "./SettingsSecurityPanel";
+import { SettingsHomeStashTvPanel } from "../HomeStashTV/SettingsHomeStashTvPanel";
 import Changelog from "../Changelog/Changelog";
 import { TroubleshootingModeButton } from "../TroubleshootingMode/TroubleshootingModeButton";
 import { useTroubleshootingMode } from "../TroubleshootingMode/useTroubleshootingMode";
@@ -28,6 +29,7 @@ const validTabs = [
   "security",
   "metadata-providers",
   "services",
+  "home-stash-tv",
   "system",
   "plugins",
   "logs",
@@ -95,6 +97,11 @@ const SettingTabs: React.FC<{ tab: TabKey }> = ({ tab }) => {
                 <Nav.Link eventKey="services">
                   <FormattedMessage id="config.categories.services" />
                 </Nav.Link>
+              </LinkContainer>
+            </Nav.Item>
+            <Nav.Item>
+              <LinkContainer to="/settings?tab=home-stash-tv">
+                <Nav.Link eventKey="home-stash-tv">Home Stash TV</Nav.Link>
               </LinkContainer>
             </Nav.Item>
             <Nav.Item>
@@ -176,6 +183,9 @@ const SettingTabs: React.FC<{ tab: TabKey }> = ({ tab }) => {
             </Tab.Pane>
             <Tab.Pane eventKey="services" unmountOnExit>
               <SettingsServicesPanel />
+            </Tab.Pane>
+            <Tab.Pane eventKey="home-stash-tv" unmountOnExit>
+              <SettingsHomeStashTvPanel />
             </Tab.Pane>
             <Tab.Pane eventKey="tools" unmountOnExit>
               <SettingsToolsPanel />
