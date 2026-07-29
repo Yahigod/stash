@@ -551,14 +551,26 @@ func isURL(s string) bool {
 	return strings.HasPrefix(s, "http://") || strings.HasPrefix(s, "https://")
 }
 
+func defaultPageConnectSources() []string {
+	return []string{
+		"data:",
+		"'self'",
+		// Home Stash TV uses a browser-local, user-configured bridge origin.
+		// The server cannot enumerate that origin when it emits this header.
+		"http:",
+		"https:",
+		// Workaround Safari bug https://bugs.webkit.org/show_bug.cgi?id=201591
+		// Allows websocket requests to any origin.
+		"ws:",
+		"wss:",
+	}
+}
+
 func setPageSecurityHeaders(w http.ResponseWriter, r *http.Request, plugins []*plugin.Plugin) {
 	c := config.GetInstance()
 
 	defaultSrc := "data: 'self' 'unsafe-inline'"
-	connectSrcSlice := []string{
-		"data:",
-		"'self'",
-	}
+	connectSrcSlice := defaultPageConnectSources()
 	imageSrc := "data: *"
 	scriptSrcSlice := []string{
 		"'self'",
@@ -572,10 +584,6 @@ func setPageSecurityHeaders(w http.ResponseWriter, r *http.Request, plugins []*p
 		"'unsafe-inline'",
 	}
 	mediaSrc := "blob: 'self'"
-
-	// Workaround Safari bug https://bugs.webkit.org/show_bug.cgi?id=201591
-	// Allows websocket requests to any origin
-	connectSrcSlice = append(connectSrcSlice, "ws:", "wss:")
 
 	// The graphql playground pulls its frontend from a cdn
 	if r.URL.Path == playgroundEndpoint {

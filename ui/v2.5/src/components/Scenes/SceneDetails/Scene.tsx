@@ -77,6 +77,9 @@ const GalleryViewer = lazyComponent(
 const ExternalPlayerButton = lazyComponent(
   () => import("./ExternalPlayerButton")
 );
+const SendToTvDialog = lazyComponent(
+  () => import("src/components/HomeStashTV/SendToTvDialog")
+);
 
 const QueueViewer = lazyComponent(() => import("./QueueViewer"));
 const SceneMarkersPanel = lazyComponent(() => import("./SceneMarkersPanel"));
@@ -221,6 +224,7 @@ const ScenePage: React.FC<IProps> = PatchComponent("ScenePage", (props) => {
   const [isMerging, setIsMerging] = useState(false);
   const [isDeleteAlertOpen, setIsDeleteAlertOpen] = useState<boolean>(false);
   const [isGenerateDialogOpen, setIsGenerateDialogOpen] = useState(false);
+  const [isSendToTvOpen, setIsSendToTvOpen] = useState(false);
 
   const onIncrementOClick = async () => {
     try {
@@ -468,6 +472,13 @@ const ScenePage: React.FC<IProps> = PatchComponent("ScenePage", (props) => {
           </Dropdown.Item>
         )}
         <Dropdown.Item
+          key="send-to-tv"
+          className="bg-secondary text-white"
+          onClick={() => setIsSendToTvOpen(true)}
+        >
+          Send to TV…
+        </Dropdown.Item>
+        <Dropdown.Item
           key="generate"
           className="bg-secondary text-white"
           onClick={() => setIsGenerateDialogOpen(true)}
@@ -677,6 +688,16 @@ const ScenePage: React.FC<IProps> = PatchComponent("ScenePage", (props) => {
       {maybeRenderSceneGenerateDialog()}
       {maybeRenderMergeDialog()}
       {maybeRenderDeleteDialog()}
+      {isSendToTvOpen && (
+        <SendToTvDialog
+          sceneIDs={[scene.id]}
+          startPositionMs={Math.max(
+            0,
+            Math.floor((getPlayerPosition() ?? 0) * 1000)
+          )}
+          onClose={() => setIsSendToTvOpen(false)}
+        />
+      )}
       <div
         className={`scene-tabs order-xl-first order-last ${
           collapsed ? "collapsed" : ""
