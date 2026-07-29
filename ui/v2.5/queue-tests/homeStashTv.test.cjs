@@ -141,6 +141,39 @@ test("fake bridge discovery uses sender authentication and preserves device stat
   );
 });
 
+test("default fetch stays bound to the runtime global", async () => {
+  const originalFetch = globalThis.fetch;
+  let observedReceiver;
+  let observedRequest;
+
+  globalThis.fetch = async function (url, init) {
+    observedReceiver = this;
+    observedRequest = { url, init };
+
+    return response(200, {
+      v: 1,
+      receivers: [],
+    });
+  };
+
+  try {
+    const receivers = await new BridgeClient(settings()).listReceivers();
+
+    assert.deepEqual(receivers, []);
+    assert.equal(observedReceiver, globalThis);
+    assert.equal(
+      observedRequest.url,
+      "http://bridge.test:8791/api/v1/receivers"
+    );
+    assert.equal(
+      observedRequest.init.headers.Authorization,
+      `Bearer ${settings().senderToken}`
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("fake bridge command keeps selected order, start position, and policy", async () => {
   let request;
   const fakeFetch = async (url, init) => {

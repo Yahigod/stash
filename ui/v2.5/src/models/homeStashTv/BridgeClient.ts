@@ -208,10 +208,13 @@ export class BridgeClient {
   private readonly senderToken: string;
   private readonly fetchImpl: Fetch;
 
-  constructor(settings: IHomeStashTvSettings, fetchImpl: Fetch = fetch) {
+  constructor(settings: IHomeStashTvSettings, fetchImpl?: Fetch) {
     this.bridgeUrl = normalizeBridgeUrl(settings.bridgeUrl);
     this.senderToken = settings.senderToken;
-    this.fetchImpl = fetchImpl;
+
+    // Browser-native fetch is receiver-sensitive. Bind it before storing it on
+    // the client so `this.fetchImpl(...)` cannot rebind `this` to BridgeClient.
+    this.fetchImpl = fetchImpl ?? globalThis.fetch.bind(globalThis);
   }
 
   private async request<T>(path: string, init?: RequestInit): Promise<T> {
