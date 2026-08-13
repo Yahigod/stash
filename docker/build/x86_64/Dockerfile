@@ -9,8 +9,8 @@ WORKDIR /stash
 COPY Makefile /stash/
 COPY ./graphql /stash/graphql/
 COPY ./ui /stash/ui/
-# pnpm install with npm
-RUN npm install -g pnpm
+# Honor the exact pnpm version and integrity declared by the UI package.
+RUN corepack enable
 RUN make pre-ui
 RUN make generate-ui
 ARG GITHASH
