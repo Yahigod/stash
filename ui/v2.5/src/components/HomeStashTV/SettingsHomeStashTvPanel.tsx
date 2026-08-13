@@ -174,8 +174,8 @@ export const SettingsHomeStashTvPanel: React.FC = () => {
 
       <Alert variant="info">
         Pairing and revocation remain bridge-host actions. This page discovers
-        paired TVs and lets each Home Stash origin remember its preferred
-        device/profile target.
+        paired TVs. The Send to TV dialog lets each Home Stash origin choose and
+        remember its preferred device/profile target.
       </Alert>
     </div>
   );

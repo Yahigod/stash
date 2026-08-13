@@ -6,10 +6,11 @@ import { useToast } from "src/hooks/Toast";
 import {
   BridgeClient,
   BridgeError,
-  IHomeStashTvTarget,
   IReceiver,
+  homeStashTvTargetKey,
   loadHomeStashTvSettings,
   saveHomeStashTvSettings,
+  selectInitialHomeStashTvTarget,
 } from "src/models/homeStashTv/BridgeClient";
 
 interface ISendToTvDialog {
@@ -17,10 +18,6 @@ interface ISendToTvDialog {
   resolveSceneIDs?: () => Promise<string[]>;
   startPositionMs?: number;
   onClose: () => void;
-}
-
-function targetKey(target: IHomeStashTvTarget) {
-  return `${target.receiverId}:${target.profileId}`;
 }
 
 function receiverStatus(receiver: IReceiver) {
@@ -81,15 +78,8 @@ export const SendToTvDialog: React.FC<ISendToTvDialog> = ({
         const options = receiverOptions(value).filter(
           (target) => !target.disabled
         );
-        const preferred = settings.preferredTarget
-          ? targetKey(settings.preferredTarget)
-          : undefined;
         setSelectedTarget(
-          options.some((target) => targetKey(target) === preferred)
-            ? preferred ?? ""
-            : options[0]
-            ? targetKey(options[0])
-            : ""
+          selectInitialHomeStashTvTarget(options, settings.preferredTarget)
         );
       })
       .catch((cause) => {
@@ -104,7 +94,7 @@ export const SendToTvDialog: React.FC<ISendToTvDialog> = ({
     if (!settings) return;
 
     const target = availableTargets.find(
-      (candidate) => targetKey(candidate) === selectedTarget
+      (candidate) => homeStashTvTargetKey(candidate) === selectedTarget
     );
     if (!target) {
       setError("Choose an available TV and Stash profile.");
@@ -174,7 +164,7 @@ export const SendToTvDialog: React.FC<ISendToTvDialog> = ({
   }
 
   const selected = availableTargets.find(
-    (target) => targetKey(target) === selectedTarget
+    (target) => homeStashTvTargetKey(target) === selectedTarget
   );
 
   return (
@@ -220,19 +210,28 @@ export const SendToTvDialog: React.FC<ISendToTvDialog> = ({
                 setError(undefined);
               }}
             >
+              {targets.length > 0 && !selectedTarget && (
+                <option value="">Choose a TV and Stash profile</option>
+              )}
               {targets.length === 0 && (
                 <option value="">No target found</option>
               )}
               {targets.map((target) => (
                 <option
-                  key={targetKey(target)}
-                  value={targetKey(target)}
+                  key={homeStashTvTargetKey(target)}
+                  value={homeStashTvTargetKey(target)}
                   disabled={target.disabled}
                 >
                   {target.deviceName} — {target.profileName} ({target.status})
                 </option>
               ))}
             </Form.Control>
+            {!loading && availableTargets.length > 1 && !selected && (
+              <Form.Text className="text-warning">
+                Multiple TV and Stash profile targets are available. Choose the
+                intended target explicitly; Home Stash will not guess.
+              </Form.Text>
+            )}
             {selected && !selected.online && (
               <Form.Text className="text-warning">
                 This TV is offline. The bridge will wake it and retain the

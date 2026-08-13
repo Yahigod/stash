@@ -6,6 +6,26 @@ export interface IHomeStashTvTarget {
   profileId: string;
 }
 
+export function homeStashTvTargetKey(target: IHomeStashTvTarget) {
+  return `${target.receiverId}:${target.profileId}`;
+}
+
+export function selectInitialHomeStashTvTarget(
+  targets: readonly IHomeStashTvTarget[],
+  preferredTarget?: IHomeStashTvTarget
+) {
+  const preferred = preferredTarget
+    ? homeStashTvTargetKey(preferredTarget)
+    : undefined;
+  if (
+    preferred &&
+    targets.some((target) => homeStashTvTargetKey(target) === preferred)
+  ) {
+    return preferred;
+  }
+  return targets.length === 1 ? homeStashTvTargetKey(targets[0]) : "";
+}
+
 export interface IHomeStashTvSettings {
   version: 1;
   bridgeUrl: string;

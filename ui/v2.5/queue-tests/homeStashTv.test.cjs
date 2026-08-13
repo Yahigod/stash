@@ -37,9 +37,11 @@ const {
   BridgeClient,
   BridgeError,
   clearHomeStashTvSettings,
+  homeStashTvTargetKey,
   loadHomeStashTvSettings,
   normalizeBridgeUrl,
   saveHomeStashTvSettings,
+  selectInitialHomeStashTvTarget,
 } = loadTypeScript("../src/models/homeStashTv/BridgeClient.ts");
 const { resolveFilteredSceneIDs } = loadTypeScript(
   "../src/models/homeStashTv/queue.ts"
@@ -96,6 +98,25 @@ test("settings stay browser-local and can be cleared", () => {
   } finally {
     global.window = originalWindow;
   }
+});
+
+test("multiple receiver apps require an explicit target", () => {
+  const debug = { receiverId: "debug", profileId: "normal" };
+  const production = { receiverId: "production", profileId: "normal" };
+
+  assert.equal(selectInitialHomeStashTvTarget([debug, production]), "");
+  assert.equal(
+    selectInitialHomeStashTvTarget([debug, production], production),
+    homeStashTvTargetKey(production)
+  );
+  assert.equal(
+    selectInitialHomeStashTvTarget([production]),
+    homeStashTvTargetKey(production)
+  );
+  assert.equal(
+    selectInitialHomeStashTvTarget([production], debug),
+    homeStashTvTargetKey(production)
+  );
 });
 
 test("fake bridge discovery uses sender authentication and preserves device states", async () => {
