@@ -129,3 +129,30 @@ Build a reproducible custom Stash version with deterministic continuous playback
 - [ ] javStash passes final PC and TV validation.
 - [ ] `home-server` records deployed image digests and rollback instructions.
 - [ ] Work is complete only after both instances have passed final testing.
+
+## Post-MVP follow-up — browser-independent bridge access
+
+This follow-up does not block the Normal or javStash MVP acceptance gates above.
+It is the first planned improvement before the browser integration is considered
+polished. System integration, deployment, and acceptance are tracked in
+[`Yahigod/home-server#294`](https://github.com/Yahigod/home-server/issues/294).
+
+- [ ] Replace per-browser bridge URLs, sender tokens, and Local Network Access
+      workarounds with a fixed same-origin server gateway.
+- [ ] Keep the raw sender token in a private, read-only server secret; never
+      return it to frontend JavaScript or place it in browser storage, images,
+      source control, Compose, logs, or diagnostics.
+- [ ] Pin one reviewed bridge destination and forward only receiver discovery,
+      play-queue command creation, and command-status reads.
+- [ ] Reject client-selected upstreams, arbitrary paths or methods, pairing and
+      administrative routes, and all generic proxy behavior.
+- [ ] Require authenticated Stash access and retain origin/CSRF checks, bounded
+      requests and responses, timeouts, schema validation, and audit evidence.
+- [ ] Verify the macvlan reachability boundary before implementation; do not
+      change shared network or IPAM state as an incidental workaround.
+- [ ] Add deterministic authentication, allowlist, SSRF, secret non-disclosure,
+      timeout, and response-bound tests.
+- [ ] Validate fresh Firefox and LibreWolf profiles without manual bridge setup
+      or browser local-network preference changes.
+- [ ] Retain the browser-direct transport until the replacement passes Normal
+      and javStash end-to-end acceptance and has a documented rollback.
