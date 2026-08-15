@@ -29,6 +29,11 @@ func allowUnauthenticated(r *http.Request) bool {
 	return strings.HasPrefix(r.URL.Path, loginEndpoint) || r.URL.Path == logoutEndpoint || r.URL.Path == "/css" || strings.HasPrefix(r.URL.Path, "/assets")
 }
 
+func requiresUnauthorizedResponse(requestPath string) bool {
+	ext := path.Ext(requestPath)
+	return requestPath == gqlEndpoint || requestPath == homeStashTVGatewayPrefix || strings.HasPrefix(requestPath, homeStashTVGatewayPrefix+"/") || (ext != "" && ext != ".html")
+}
+
 func authenticateHandler() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -78,9 +83,10 @@ func authenticateHandler() func(http.Handler) http.Handler {
 			if c.HasCredentials() {
 				// authentication is required
 				if userID == "" && !allowUnauthenticated(r) {
-					// if graphql or a non-webpage was requested, we just return a forbidden error
-					ext := path.Ext(r.URL.Path)
-					if r.URL.Path == gqlEndpoint || (ext != "" && ext != ".html") {
+					// API and non-webpage requests receive an explicit authentication
+					// failure so browser clients cannot mistake a login-page redirect for
+					// an unavailable backend and downgrade their transport.
+					if requiresUnauthorizedResponse(r.URL.Path) {
 						w.Header().Add("WWW-Authenticate", "FormBased")
 						w.WriteHeader(http.StatusUnauthorized)
 						return

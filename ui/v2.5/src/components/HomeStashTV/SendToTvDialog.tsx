@@ -8,9 +8,11 @@ import {
   BridgeError,
   IReceiver,
   homeStashTvTargetKey,
+  loadHomeStashTvPreferredTarget,
   loadHomeStashTvSettings,
-  saveHomeStashTvSettings,
+  saveHomeStashTvPreferredTarget,
   selectInitialHomeStashTvTarget,
+  shouldTryLegacyHomeStashTvTransport,
 } from "src/models/homeStashTv/BridgeClient";
 
 interface ISendToTvDialog {
@@ -54,10 +56,12 @@ export const SendToTvDialog: React.FC<ISendToTvDialog> = ({
   onClose,
 }) => {
   const Toast = useToast();
-  const settings = useMemo(() => loadHomeStashTvSettings(), []);
+  const legacySettings = useMemo(() => loadHomeStashTvSettings(), []);
+  const preferredTarget = useMemo(() => loadHomeStashTvPreferredTarget(), []);
+  const [client, setClient] = useState<BridgeClient>();
   const [receivers, setReceivers] = useState<IReceiver[]>([]);
   const [selectedTarget, setSelectedTarget] = useState("");
-  const [loading, setLoading] = useState(!!settings);
+  const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string>();
 
@@ -68,30 +72,42 @@ export const SendToTvDialog: React.FC<ISendToTvDialog> = ({
   );
 
   useEffect(() => {
-    if (!settings) return;
+    async function discover() {
+      let activeClient = new BridgeClient();
+      let value: IReceiver[];
+      try {
+        value = await activeClient.listReceivers();
+      } catch (cause) {
+        if (!legacySettings || !shouldTryLegacyHomeStashTvTransport(cause)) {
+          throw cause;
+        }
+        activeClient = new BridgeClient(legacySettings);
+        value = await activeClient.listReceivers();
+      }
 
-    const client = new BridgeClient(settings);
-    client
-      .listReceivers()
-      .then((value) => {
-        setReceivers(value);
-        const options = receiverOptions(value).filter(
-          (target) => !target.disabled
-        );
-        setSelectedTarget(
-          selectInitialHomeStashTvTarget(options, settings.preferredTarget)
-        );
-      })
+      setClient(activeClient);
+      setReceivers(value);
+      const options = receiverOptions(value).filter(
+        (target) => !target.disabled
+      );
+      setSelectedTarget(
+        selectInitialHomeStashTvTarget(options, preferredTarget)
+      );
+    }
+
+    discover()
       .catch((cause) => {
+        setClient(undefined);
+        setReceivers([]);
         setError(
           cause instanceof Error ? cause.message : "Could not load TV devices."
         );
       })
       .finally(() => setLoading(false));
-  }, [settings]);
+  }, [legacySettings, preferredTarget]);
 
   async function onSend() {
-    if (!settings) return;
+    if (!client) return;
 
     const target = availableTargets.find(
       (candidate) => homeStashTvTargetKey(candidate) === selectedTarget
@@ -111,15 +127,10 @@ export const SendToTvDialog: React.FC<ISendToTvDialog> = ({
         throw new Error("The TV queue contains no scenes.");
       }
 
-      const updatedSettings = saveHomeStashTvSettings({
-        bridgeUrl: settings.bridgeUrl,
-        senderToken: settings.senderToken,
-        preferredTarget: {
-          receiverId: target.receiverId,
-          profileId: target.profileId,
-        },
+      saveHomeStashTvPreferredTarget({
+        receiverId: target.receiverId,
+        profileId: target.profileId,
       });
-      const client = new BridgeClient(updatedSettings);
       const submission = await client.sendQueue({
         receiver_id: target.receiverId,
         profile_id: target.profileId,
@@ -175,11 +186,12 @@ export const SendToTvDialog: React.FC<ISendToTvDialog> = ({
       cancel={{ onClick: onClose }}
       accept={{ text: "Send", onClick: onSend }}
       isRunning={sending}
-      disabled={loading || !settings || !selected || selected.disabled}
+      disabled={loading || !client || !selected || selected.disabled}
     >
-      {!settings ? (
+      {!loading && !client ? (
         <Alert variant="warning">
-          Configure the native bridge in{" "}
+          The server gateway is unavailable. Configure the retained legacy
+          direct bridge in{" "}
           <Link to="/settings?tab=home-stash-tv" onClick={onClose}>
             Settings → Home Stash TV
           </Link>

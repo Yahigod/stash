@@ -38,10 +38,14 @@ const {
   BridgeError,
   clearHomeStashTvSettings,
   homeStashTvTargetKey,
+  loadHomeStashTvPreferences,
+  loadHomeStashTvPreferredTarget,
   loadHomeStashTvSettings,
   normalizeBridgeUrl,
   saveHomeStashTvSettings,
+  saveHomeStashTvPreferredTarget,
   selectInitialHomeStashTvTarget,
+  shouldTryLegacyHomeStashTvTransport,
 } = loadTypeScript("../src/models/homeStashTv/BridgeClient.ts");
 const { resolveFilteredSceneIDs } = loadTypeScript(
   "../src/models/homeStashTv/queue.ts"
@@ -98,6 +102,73 @@ test("settings stay browser-local and can be cleared", () => {
   } finally {
     global.window = originalWindow;
   }
+});
+
+test("gateway preferences remember only the target and never create direct settings", () => {
+  const values = new Map();
+  const originalWindow = global.window;
+  global.window = {
+    localStorage: {
+      getItem: (key) => values.get(key) ?? null,
+      setItem: (key, value) => values.set(key, value),
+      removeItem: (key) => values.delete(key),
+    },
+  };
+
+  try {
+    const target = { receiverId: "receiver", profileId: "normal-stash" };
+    saveHomeStashTvPreferredTarget(target);
+    assert.deepEqual(loadHomeStashTvPreferences(), {
+      version: 1,
+      preferredTarget: target,
+    });
+    assert.deepEqual(loadHomeStashTvPreferredTarget(), target);
+    assert.equal(loadHomeStashTvSettings(), undefined);
+    assert.equal([...values.values()].join(" ").includes("token"), false);
+    assert.equal([...values.values()].join(" ").includes("bridge"), false);
+  } finally {
+    global.window = originalWindow;
+  }
+});
+
+test("same-origin gateway needs neither a bridge URL nor sender token", async () => {
+  const requests = [];
+  const fakeFetch = async (url, init) => {
+    requests.push({ url, init });
+    return response(200, { v: 1, receivers: [] });
+  };
+
+  const client = new BridgeClient(undefined, fakeFetch);
+  assert.deepEqual(await client.listReceivers(), []);
+  assert.equal(client.transport, "gateway");
+  assert.equal(requests[0].url, "/api/home-stash-tv/v1/receivers");
+  assert.equal(requests[0].init.headers["X-Stash-TV-CSRF"], "1");
+  assert.equal("Authorization" in requests[0].init.headers, false);
+  assert.equal(
+    JSON.stringify(requests[0]).includes(settings().senderToken),
+    false
+  );
+});
+
+test("legacy direct transport is attempted only for gateway availability failures", () => {
+  assert.equal(
+    shouldTryLegacyHomeStashTvTransport(
+      new BridgeError("missing", "gateway_unavailable", 404)
+    ),
+    true
+  );
+  assert.equal(
+    shouldTryLegacyHomeStashTvTransport(
+      new BridgeError("login", "stash_unauthorized", 401)
+    ),
+    false
+  );
+  assert.equal(
+    shouldTryLegacyHomeStashTvTransport(
+      new BridgeError("origin", "gateway_forbidden", 403)
+    ),
+    false
+  );
 });
 
 test("multiple receiver apps require an explicit target", () => {
