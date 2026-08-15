@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/stashapp/stash/pkg/session"
 )
 
@@ -52,6 +53,32 @@ func homeStashTVGatewayTestHandler(t *testing.T, upstream http.Handler) http.Han
 		func(*http.Request) bool { return true },
 		func(string, string, int, time.Duration) {},
 	)
+}
+
+func TestHomeStashTVGatewayMountedRouteStripsPublicPrefix(t *testing.T) {
+	upstreamPath := make(chan string, 1)
+	upstream := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		upstreamPath <- r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"v":1,"receivers":[]}`)
+	})
+	router := chi.NewRouter()
+	mountHomeStashTVGateway(router, homeStashTVGatewayTestHandler(t, upstream))
+
+	recorder := httptest.NewRecorder()
+	request := homeStashTVGatewayTestRequest(
+		http.MethodGet,
+		homeStashTVGatewayPrefix+"/v1/receivers",
+		nil,
+	)
+	router.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("mounted gateway returned %d: %s", recorder.Code, recorder.Body.String())
+	}
+	if path := <-upstreamPath; path != "/api/v1/receivers" {
+		t.Fatalf("unexpected upstream path %q", path)
+	}
 }
 
 func TestHomeStashTVGatewayConfigIsOptionalButComplete(t *testing.T) {
