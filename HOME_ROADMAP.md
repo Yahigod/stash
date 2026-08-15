@@ -113,6 +113,26 @@ Build a reproducible custom Stash version with deterministic continuous playback
 - [ ] Validate manual Next/Previous/Shuffle.
 - [ ] Validate Send to TV with the television on and off.
 
+## Phase 9 — Same-origin Home Stash TV gateway
+
+- [x] Keep the sender token out of frontend assets, API responses, and browser
+      storage.
+- [x] Pin one server-configured bridge origin.
+- [x] Allow only receiver discovery, command creation, and command-status
+      reads.
+- [x] Require a Stash login session plus same-origin and CSRF evidence.
+- [x] Bound request/response sizes, JSON schemas, redirects, and upstream time.
+- [x] Retain browser-direct transport only as an availability rollback path.
+- [ ] Prove Normal and javStash containers can reach the reviewed bridge path
+      without changing shared macvlan/IPAM.
+- [ ] Deploy a private read-only sender-token file and fixed destination to both
+      live Stash instances.
+- [ ] Validate a fresh Firefox, LibreWolf, and Chromium-family profile with no
+      per-browser URL, token, or Local Network Access exception.
+- [ ] Prove the token is absent from served assets, browser storage, responses,
+      logs, deployment configuration, and Git history.
+- [ ] Clear retained legacy browser settings only after end-to-end acceptance.
+
 ## Rollback
 
 - [ ] Keep the exact previous official image reference.

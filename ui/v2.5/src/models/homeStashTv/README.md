@@ -27,30 +27,69 @@ A typical symptom is that a direct page-context `fetch()` succeeds while the
 typed client reports that the bridge is unreachable and browser network
 instrumentation sees no request.
 
-## LAN browser transport has separate security layers
+## Same-origin gateway is the primary transport
 
-A working Home Stash TV browser connection requires all of these:
+The primary transport is the server-side route rooted at
+`/api/home-stash-tv`. The browser sends only same-origin requests and retains
+only its preferred receiver/profile target. It never receives or stores the
+bridge destination or sender token.
 
-1. The Stash page Content Security Policy must permit the configured HTTP or
-   HTTPS bridge connection.
-2. The bridge must allow the exact Stash browser origin through CORS.
-3. CORS preflight must allow the request method and the `Authorization`,
-   `Accept`, and `Content-Type` headers used by the client.
-4. Browsers that enforce Local Network Access must permit the page origin to
-   contact LAN resources.
+The server gateway is deliberately narrower than the bridge API:
 
-Test these layers separately. A successful command-line request does not prove
-that a browser request is permitted.
+- receiver discovery, command creation, and command-status reads are allowed;
+- pairing, approval, revocation, receiver WebSockets, arbitrary paths, and
+  arbitrary methods are not mounted;
+- the upstream is one operator-configured HTTP(S) origin and cannot be chosen
+  by a browser request;
+- request and response bodies, JSON schemas, redirects, and request duration
+  are bounded;
+- a Stash login session, a same-origin browser signal, and
+  `X-Stash-TV-CSRF: 1` are all required;
+- Stash API keys do not authorize this browser-only gateway.
+
+Enable the gateway only when Stash credentials are configured. Set both
+`STASH_TV_GATEWAY_URL` and `STASH_TV_GATEWAY_TOKEN_FILE` before process start.
+The token file path must be absolute and canonical, point directly to a private
+regular file, and contain only the sender token. Partial or unsafe
+configuration stops Stash rather than silently weakening the boundary.
+
+The gateway logs only its bounded route name, method, status, and duration. Do
+not add receiver IDs, scene IDs, command bodies, upstream response bodies, or
+the token to logs.
+
+## Legacy direct browser transport is a rollback path
+
+The prior browser-direct transport remains available during migration and
+rollback. It requires all of these independent browser security layers:
+
+1. The Stash page Content Security Policy permits the configured HTTP or HTTPS
+   bridge connection.
+2. The bridge allows the exact Stash browser origin through CORS.
+3. CORS preflight allows the request method and the `Authorization`, `Accept`,
+   and `Content-Type` headers used by the client.
+4. Browsers that enforce Local Network Access permit the page origin to contact
+   LAN resources.
+
+The UI tries this path only when the same-origin gateway is absent or
+unavailable and legacy settings already exist in that browser. Authentication,
+origin, and CSRF failures never downgrade to the legacy transport. After the
+gateway passes end-to-end acceptance, clear the old browser-held settings.
 
 ## Acceptance must exercise the real UI
 
 Checkpoint acceptance must originate from the built-in Home Stash interface:
 
-- configure the bridge through the Home Stash TV settings panel;
+- sign in to Stash and confirm the settings panel reports that the server
+  gateway is connected without entering a bridge URL or token;
 - discover the paired receiver and its profiles;
 - submit current-scene, ordered-selection, and filtered-queue commands through
   the visible Send to TV actions;
 - observe the resulting command state and native receiver behavior.
+
+Repeat this from a fresh Firefox, LibreWolf, and Chromium-family browser
+profile. No browser should need a Local Network Access exception. Confirm that
+HTML, built assets, browser storage, API responses, and ordinary logs contain
+neither the sender token nor the fixed upstream.
 
 Direct bridge API calls are useful for diagnosis and observation, but they are
 not a substitute for UI acceptance.

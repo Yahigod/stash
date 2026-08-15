@@ -11,17 +11,23 @@ This fork is the source of truth for George's self-hosted Stash builds.
 
 ## Custom changes
 
-No source changes yet.
+- Directly opened scenes and one-item queues loop continuously.
+- Explicit and filtered queues continue through every item and reshuffle only
+  after a completed cycle.
+- Multi-scene cycles avoid repeating their boundary scene and, for three or
+  more scenes, avoid repeating the complete prior order.
+- Manual Next, Previous, Shuffle, refresh, and replacement-queue behavior stay
+  available.
+- Send to TV preserves the same reviewed queue policy through the native Home
+  Stash TV receiver.
+- A narrow same-origin Home Stash TV gateway keeps the fixed bridge destination
+  and sender credential on the server. It exposes only receiver discovery,
+  command creation, and command-status reads to authenticated browser sessions.
+- The browser-direct bridge transport remains temporarily available as a
+  bounded migration and rollback path.
 
-Planned work:
-
-- Loop directly opened scenes indefinitely.
-- Continue explicit and filtered queues through every item.
-- Reshuffle completed multi-scene cycles.
-- Prevent the first scene of a new cycle from matching the final scene of the previous cycle.
-- Preserve manual Next, Previous, Shuffle, refresh, and new-queue behavior.
-- Integrate the behavior with Send to TV.
-- Validate Normal Stash before javStash.
+Deployment, rotation, migration, and rollback are documented in
+[`HOME_STASH_TV_GATEWAY.md`](HOME_STASH_TV_GATEWAY.md).
 
 ## Build and release policy
 

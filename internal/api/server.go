@@ -157,6 +157,15 @@ func Initialize() (*Server, error) {
 
 	r.Use(dataloaders.Middleware)
 
+	homeStashTVGatewayHandler, err := newHomeStashTVGatewayFromEnvironment()
+	if err != nil {
+		return nil, fmt.Errorf("Home Stash TV gateway configuration error: %w", err)
+	}
+	if homeStashTVGatewayHandler == nil {
+		homeStashTVGatewayHandler = http.NotFoundHandler()
+	}
+	r.Mount(homeStashTVGatewayPrefix, homeStashTVGatewayHandler)
+
 	pluginCache := mgr.PluginCache
 	sceneService := mgr.SceneService
 	imageService := mgr.ImageService

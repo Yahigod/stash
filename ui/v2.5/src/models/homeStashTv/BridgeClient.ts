@@ -1,5 +1,8 @@
 const SETTINGS_STORAGE_KEY = "homeStash.tv.settings.v1";
+const PREFERENCES_STORAGE_KEY = "homeStash.tv.preferences.v1";
 const PROTOCOL_VERSION = 1;
+const GATEWAY_PREFIX = "/api/home-stash-tv";
+const GATEWAY_CSRF_HEADER = "X-Stash-TV-CSRF";
 
 export interface IHomeStashTvTarget {
   receiverId: string;
@@ -30,6 +33,11 @@ export interface IHomeStashTvSettings {
   version: 1;
   bridgeUrl: string;
   senderToken: string;
+  preferredTarget?: IHomeStashTvTarget;
+}
+
+export interface IHomeStashTvPreferences {
+  version: 1;
   preferredTarget?: IHomeStashTvTarget;
 }
 
@@ -209,28 +217,83 @@ export function clearHomeStashTvSettings() {
   browserStorage()?.removeItem(SETTINGS_STORAGE_KEY);
 }
 
+export function loadHomeStashTvPreferences(): IHomeStashTvPreferences {
+  try {
+    const raw = browserStorage()?.getItem(PREFERENCES_STORAGE_KEY);
+    if (!raw) return { version: 1 };
+
+    const value = JSON.parse(raw) as Partial<IHomeStashTvPreferences>;
+    if (value.version !== 1) return { version: 1 };
+    return { version: 1, preferredTarget: value.preferredTarget };
+  } catch {
+    return { version: 1 };
+  }
+}
+
+export function saveHomeStashTvPreferredTarget(
+  preferredTarget: IHomeStashTvTarget
+) {
+  const preferences: IHomeStashTvPreferences = {
+    version: 1,
+    preferredTarget,
+  };
+  browserStorage()?.setItem(
+    PREFERENCES_STORAGE_KEY,
+    JSON.stringify(preferences)
+  );
+  return preferences;
+}
+
+export function loadHomeStashTvPreferredTarget() {
+  return (
+    loadHomeStashTvPreferences().preferredTarget ??
+    loadHomeStashTvSettings()?.preferredTarget
+  );
+}
+
 function safeErrorMessage(
   value: unknown,
   fallback: string,
-  sensitiveValue: string
+  sensitiveValue?: string
 ) {
   if (value && typeof value === "object" && "error" in value) {
     const message = (value as { error?: unknown }).error;
     if (typeof message === "string" && message.length <= 200) {
-      return message.split(sensitiveValue).join("[redacted]");
+      return sensitiveValue
+        ? message.split(sensitiveValue).join("[redacted]")
+        : message;
     }
   }
   return fallback;
 }
 
+function gatewayURL(path: string) {
+  const gatewayPath = `${GATEWAY_PREFIX}${path.replace(/^\/api/, "")}`;
+  if (typeof document !== "undefined" && document.baseURI) {
+    return new URL(gatewayPath.replace(/^\//, ""), document.baseURI).toString();
+  }
+  return gatewayPath;
+}
+
+export function shouldTryLegacyHomeStashTvTransport(value: unknown) {
+  return (
+    value instanceof BridgeError &&
+    (value.code === "gateway_unavailable" || value.code === "bridge_offline")
+  );
+}
+
 export class BridgeClient {
-  private readonly bridgeUrl: string;
-  private readonly senderToken: string;
+  public readonly transport: "gateway" | "direct";
+  private readonly bridgeUrl?: string;
+  private readonly senderToken?: string;
   private readonly fetchImpl: Fetch;
 
-  constructor(settings: IHomeStashTvSettings, fetchImpl?: Fetch) {
-    this.bridgeUrl = normalizeBridgeUrl(settings.bridgeUrl);
-    this.senderToken = settings.senderToken;
+  constructor(settings?: IHomeStashTvSettings, fetchImpl?: Fetch) {
+    this.transport = settings ? "direct" : "gateway";
+    this.bridgeUrl = settings
+      ? normalizeBridgeUrl(settings.bridgeUrl)
+      : undefined;
+    this.senderToken = settings?.senderToken;
 
     // Browser-native fetch is receiver-sensitive. Bind it before storing it on
     // the client so `this.fetchImpl(...)` cannot rebind `this` to BridgeClient.
@@ -238,21 +301,29 @@ export class BridgeClient {
   }
 
   private async request<T>(path: string, init?: RequestInit): Promise<T> {
+    const requestUrl =
+      this.transport === "gateway"
+        ? gatewayURL(path)
+        : `${this.bridgeUrl}${path}`;
     let response: Response;
     try {
-      response = await this.fetchImpl(`${this.bridgeUrl}${path}`, {
+      response = await this.fetchImpl(requestUrl, {
         ...init,
         headers: {
           Accept: "application/json",
-          Authorization: `Bearer ${this.senderToken}`,
+          ...(this.transport === "gateway"
+            ? { [GATEWAY_CSRF_HEADER]: "1" }
+            : { Authorization: `Bearer ${this.senderToken}` }),
           ...(init?.body ? { "Content-Type": "application/json" } : {}),
           ...init?.headers,
         },
       });
     } catch {
       throw new BridgeError(
-        "Home Stash TV bridge is unreachable.",
-        "bridge_offline"
+        this.transport === "gateway"
+          ? "Home Stash TV server gateway is unreachable."
+          : "Home Stash TV bridge is unreachable.",
+        this.transport === "gateway" ? "gateway_unavailable" : "bridge_offline"
       );
     }
 
@@ -265,7 +336,15 @@ export class BridgeClient {
 
     if (!response.ok) {
       const code =
-        response.status === 401
+        this.transport === "gateway" && response.status === 404
+          ? "gateway_unavailable"
+          : this.transport === "gateway" && response.status >= 500
+          ? "gateway_unavailable"
+          : this.transport === "gateway" && response.status === 401
+          ? "stash_unauthorized"
+          : this.transport === "gateway" && response.status === 403
+          ? "gateway_forbidden"
+          : response.status === 401
           ? "sender_unauthorized"
           : response.status === 410
           ? "command_expired"
@@ -273,11 +352,24 @@ export class BridgeClient {
       throw new BridgeError(
         safeErrorMessage(
           value,
-          `Bridge request failed (${response.status}).`,
+          this.transport === "gateway"
+            ? `TV gateway request failed (${response.status}).`
+            : `Bridge request failed (${response.status}).`,
           this.senderToken
         ),
         code,
         response.status
+      );
+    }
+
+    if (value === undefined) {
+      throw new BridgeError(
+        this.transport === "gateway"
+          ? "Home Stash TV server gateway is not available."
+          : "Bridge returned an invalid response.",
+        this.transport === "gateway"
+          ? "gateway_unavailable"
+          : "protocol_incompatible"
       );
     }
 
