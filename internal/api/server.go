@@ -164,7 +164,7 @@ func Initialize() (*Server, error) {
 	if homeStashTVGatewayHandler == nil {
 		homeStashTVGatewayHandler = http.NotFoundHandler()
 	}
-	r.Mount(homeStashTVGatewayPrefix, homeStashTVGatewayHandler)
+	mountHomeStashTVGateway(r, homeStashTVGatewayHandler)
 
 	pluginCache := mgr.PluginCache
 	sceneService := mgr.SceneService
@@ -306,6 +306,13 @@ func Initialize() (*Server, error) {
 	go printLatestVersion(context.TODO())
 
 	return server, nil
+}
+
+func mountHomeStashTVGateway(r chi.Router, handler http.Handler) {
+	r.Mount(
+		homeStashTVGatewayPrefix,
+		http.StripPrefix(homeStashTVGatewayPrefix, handler),
+	)
 }
 
 func handleFavicon(staticUI *statigz.Server) func(w http.ResponseWriter, r *http.Request) {
