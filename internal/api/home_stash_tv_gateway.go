@@ -28,7 +28,10 @@ const (
 	homeStashTVGatewayPrefix            = "/api/home-stash-tv"
 	homeStashTVGatewayMaxRequestBytes   = 64 * 1024
 	homeStashTVGatewayMaxResponseBytes  = 512 * 1024
-	homeStashTVGatewayTimeout           = 5 * time.Second
+	homeStashTVGatewayReadTimeout       = 5 * time.Second
+	// Command submission can include the receiver bridge's bounded
+	// 30-second foreground preparation before it returns an acknowledgement.
+	homeStashTVGatewayCommandTimeout = 40 * time.Second
 )
 
 var (
@@ -43,10 +46,12 @@ type homeStashTVGatewayConfig struct {
 }
 
 type homeStashTVGateway struct {
-	config       homeStashTVGatewayConfig
-	client       *http.Client
-	allowRequest func(*http.Request) bool
-	audit        func(method, route string, status int, duration time.Duration)
+	config         homeStashTVGatewayConfig
+	client         *http.Client
+	readTimeout    time.Duration
+	commandTimeout time.Duration
+	allowRequest   func(*http.Request) bool
+	audit          func(method, route string, status int, duration time.Duration)
 }
 
 type homeStashTVGatewayStatusWriter struct {
@@ -211,7 +216,7 @@ func newHomeStashTVGatewayFromEnvironment() (http.Handler, error) {
 	transport.Proxy = nil
 	client := &http.Client{
 		Transport: transport,
-		Timeout:   homeStashTVGatewayTimeout,
+		Timeout:   homeStashTVGatewayCommandTimeout,
 		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
@@ -225,7 +230,14 @@ func newHomeStashTVGateway(gatewayConfig homeStashTVGatewayConfig, client *http.
 			logger.Infof("Home Stash TV gateway request method=%s route=%s status=%d duration_ms=%d", method, route, status, duration.Milliseconds())
 		}
 	}
-	return &homeStashTVGateway{config: gatewayConfig, client: client, allowRequest: allowRequest, audit: audit}
+	return &homeStashTVGateway{
+		config:         gatewayConfig,
+		client:         client,
+		readTimeout:    homeStashTVGatewayReadTimeout,
+		commandTimeout: homeStashTVGatewayCommandTimeout,
+		allowRequest:   allowRequest,
+		audit:          audit,
+	}
 }
 
 func homeStashTVGatewayRequestAllowed(r *http.Request) bool {
@@ -305,7 +317,7 @@ func homeStashTVGatewaySameOrigin(r *http.Request) bool {
 
 func (g *homeStashTVGateway) forwardReceivers(w http.ResponseWriter, r *http.Request) {
 	var response homeStashTVGatewayReceiversResponse
-	status, err := g.upstreamJSON(r.Context(), http.MethodGet, "/api/v1/receivers", nil, &response)
+	status, err := g.upstreamJSON(r.Context(), g.readTimeout, http.MethodGet, "/api/v1/receivers", nil, &response)
 	if err != nil {
 		writeHomeStashTVGatewayUpstreamError(w, status, err)
 		return
@@ -324,7 +336,7 @@ func (g *homeStashTVGateway) forwardCommand(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	var response homeStashTVGatewayCommandSubmission
-	status, err := g.upstreamJSON(r.Context(), http.MethodPost, "/api/v1/commands", request, &response)
+	status, err := g.upstreamJSON(r.Context(), g.commandTimeout, http.MethodPost, "/api/v1/commands", request, &response)
 	if err != nil {
 		writeHomeStashTVGatewayUpstreamError(w, status, err)
 		return
@@ -343,7 +355,7 @@ func (g *homeStashTVGateway) forwardCommandStatus(w http.ResponseWriter, r *http
 		return
 	}
 	var response homeStashTVGatewayCommandStatus
-	status, err := g.upstreamJSON(r.Context(), http.MethodGet, "/api/v1/commands/"+commandID, nil, &response)
+	status, err := g.upstreamJSON(r.Context(), g.readTimeout, http.MethodGet, "/api/v1/commands/"+commandID, nil, &response)
 	if err != nil {
 		writeHomeStashTVGatewayUpstreamError(w, status, err)
 		return
@@ -372,7 +384,10 @@ func decodeHomeStashTVGatewayRequest(w http.ResponseWriter, r *http.Request, tar
 	return nil
 }
 
-func (g *homeStashTVGateway) upstreamJSON(ctx context.Context, method, path string, requestBody any, responseBody any) (int, error) {
+func (g *homeStashTVGateway) upstreamJSON(ctx context.Context, timeout time.Duration, method, path string, requestBody any, responseBody any) (int, error) {
+	requestContext, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
 	var body io.Reader
 	if requestBody != nil {
 		encoded, err := json.Marshal(requestBody)
@@ -381,7 +396,7 @@ func (g *homeStashTVGateway) upstreamJSON(ctx context.Context, method, path stri
 		}
 		body = bytes.NewReader(encoded)
 	}
-	request, err := http.NewRequestWithContext(ctx, method, g.config.upstreamURL.String()+path, body)
+	request, err := http.NewRequestWithContext(requestContext, method, g.config.upstreamURL.String()+path, body)
 	if err != nil {
 		return 0, err
 	}
