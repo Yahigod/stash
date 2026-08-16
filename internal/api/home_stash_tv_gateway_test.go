@@ -426,14 +426,62 @@ func TestHomeStashTVGatewayTimeoutIsBounded(t *testing.T) {
 	upstreamURL, _ := url.Parse("http://bridge.invalid")
 	handler := newHomeStashTVGateway(
 		homeStashTVGatewayConfig{upstreamURL: upstreamURL, senderToken: homeStashTVGatewayTestToken},
-		&http.Client{Transport: homeStashTVGatewayBlockingTransport{}, Timeout: 20 * time.Millisecond},
+		&http.Client{Transport: homeStashTVGatewayBlockingTransport{}},
 		func(*http.Request) bool { return true },
 		func(string, string, int, time.Duration) {},
-	)
+	).(*homeStashTVGateway)
+	handler.readTimeout = 20 * time.Millisecond
 	recorder := httptest.NewRecorder()
 	handler.ServeHTTP(recorder, homeStashTVGatewayTestRequest(http.MethodGet, "/v1/receivers", nil))
 	if recorder.Code != http.StatusGatewayTimeout {
 		t.Fatalf("timeout returned %d: %s", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestHomeStashTVGatewayCommandUsesLongerBoundedTimeout(t *testing.T) {
+	commandID := "3f0d3f0e-4d6f-4a14-8a40-9bdc8b75ce01"
+	upstream := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(100 * time.Millisecond)
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method == http.MethodPost && r.URL.Path == "/api/v1/commands" {
+			w.WriteHeader(http.StatusAccepted)
+			_, _ = io.WriteString(w, `{"v":1,"status":"pending","wake_status":"requested","command_id":"`+commandID+`","receiver_id":"receiver-1","expires_at_ms":20,"receiver_online":true}`)
+			return
+		}
+		_, _ = io.WriteString(w, `{"v":1,"receivers":[]}`)
+	})
+	handler := homeStashTVGatewayTestHandler(t, upstream).(*homeStashTVGateway)
+	handler.readTimeout = 20 * time.Millisecond
+	handler.commandTimeout = 500 * time.Millisecond
+
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, homeStashTVGatewayTestRequest(http.MethodGet, "/v1/receivers", nil))
+	if recorder.Code != http.StatusGatewayTimeout {
+		t.Fatalf("slow receiver read returned %d: %s", recorder.Code, recorder.Body.String())
+	}
+
+	body := `{"receiver_id":"receiver-1","profile_id":"normal-stash","scene_ids":["1"]}`
+	recorder = httptest.NewRecorder()
+	handler.ServeHTTP(recorder, homeStashTVGatewayTestRequest(http.MethodPost, "/v1/commands", strings.NewReader(body)))
+	if recorder.Code != http.StatusAccepted {
+		t.Fatalf("bounded foreground command returned %d: %s", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestHomeStashTVGatewayCommandTimeoutIsBounded(t *testing.T) {
+	upstreamURL, _ := url.Parse("http://bridge.invalid")
+	handler := newHomeStashTVGateway(
+		homeStashTVGatewayConfig{upstreamURL: upstreamURL, senderToken: homeStashTVGatewayTestToken},
+		&http.Client{Transport: homeStashTVGatewayBlockingTransport{}},
+		func(*http.Request) bool { return true },
+		func(string, string, int, time.Duration) {},
+	).(*homeStashTVGateway)
+	handler.commandTimeout = 20 * time.Millisecond
+	body := `{"receiver_id":"receiver-1","profile_id":"normal-stash","scene_ids":["1"]}`
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, homeStashTVGatewayTestRequest(http.MethodPost, "/v1/commands", strings.NewReader(body)))
+	if recorder.Code != http.StatusGatewayTimeout {
+		t.Fatalf("command timeout returned %d: %s", recorder.Code, recorder.Body.String())
 	}
 }
 
